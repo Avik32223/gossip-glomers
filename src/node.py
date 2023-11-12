@@ -23,7 +23,7 @@ class Node:
     stdin_lock: Lock
     stdout_lock: Lock
     stderr_lock: Lock
-    _handlers: Dict[str, Callable[[Request], Awaitable[Body]]]
+    _handlers: Dict[str, Callable[["Node", Request], Awaitable[Body]]]
     _tasks: Set[asyncio.Task]
 
     def __init__(self, node_id="") -> None:
@@ -60,7 +60,7 @@ class Node:
         await self.log(req_type)
         if req_type in self._handlers:
             handler = self._handlers[req_type]
-            reply_body = await handler(deepcopy(req))
+            reply_body = await handler(self, deepcopy(req))
         else:
             reply_body = {
                 "type": "error",
@@ -88,5 +88,5 @@ class Node:
     def run(self, *args, **kwargs):
         asyncio.run(self._run(*args, **kwargs))
 
-    def on(self, type: str, handler: Callable[[Request], Awaitable]):
+    def on(self, type: str, handler: Callable[["Node", Request], Awaitable]):
         self._handlers[type] = handler
