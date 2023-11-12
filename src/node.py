@@ -81,7 +81,6 @@ class Node:
 
     async def _handle_request(self, req: Request):
         req_type = req.body["type"]
-        await self.log(req_type)
         if req_type in self._handlers:
             handler = self._handlers[req_type]
             reply_body = await handler(self, deepcopy(req))
