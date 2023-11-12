@@ -1,7 +1,17 @@
 import asyncio
 from copy import deepcopy
 from asyncio.locks import Lock
-from typing import Any, Awaitable, Callable, Dict, List, Set, TypeAlias
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Dict,
+    List,
+    Optional,
+    Set,
+    TypeAlias,
+)
 from dataclasses import dataclass
 from sys import stdin, stderr
 import json
@@ -93,14 +103,23 @@ class Node:
         reply_body["in_reply_to"] = req.body["msg_id"]
         await self.send_request(Request(self.node_id, req.src, reply_body))
 
-    async def _run(self):
+    async def split_and_run(self, caller: Coroutine) -> asyncio.Task:
+        task = asyncio.create_task(caller)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    async def _run(self, on_init: Optional[Callable[["Node", Request], Awaitable]]):
         req = await self.receive_request()
         if req.body["type"] != "init":
             raise Exception("Init message not received yet")
+
         self.node_id = req.body["node_id"]
         self.node_ids = req.body["node_ids"]
         resp_body = {"type": "init_ok", "in_reply_to": req.body["msg_id"]}
         await self.send_request(Request(self.node_id, req.src, resp_body))
+        if on_init is not None:
+            await on_init(self, req)
 
         while True:
             req = await self.receive_request()
@@ -113,12 +132,15 @@ class Node:
                     except asyncio.InvalidStateError:
                         pass
                 continue
-            task = asyncio.create_task(self._handle_request(req))
-            self._tasks.add(task)
-            task.add_done_callback(self._tasks.discard)
+            await self.split_and_run(self._handle_request(req))
 
-    def run(self, *args, **kwargs):
-        asyncio.run(self._run(*args, **kwargs))
+    def run(
+        self,
+        on_init: Optional[Callable[["Node", Request], Awaitable]] = None,
+        *args,
+        **kwargs
+    ):
+        asyncio.run(self._run(on_init, *args, **kwargs))
 
     def on(self, type: str, handler: Callable[["Node", Request], Awaitable]):
         self._handlers[type] = handler
