@@ -26,14 +26,15 @@ async def broadcast_to_neighbour(node: Node, neighbour_id):
         diff = list(messages - sent)
         if diff:
             message = diff[0]
-            await node.send_request(
+            resp = await node.send_request_and_wait_for_response(
                 Request(
                     node.node_id,
                     neighbour_id,
                     {"type": "broadcast", "message": message},
                 )
             )
-            sent.add(message)
+            if resp["type"] == "broadcast_ok":
+                sent.add(message)
         else:
             await asyncio.sleep(1)
 
