@@ -87,6 +87,7 @@ class Node:
         async with self.stdin_lock:
             line = await loop.run_in_executor(None, stdin.readline)
             req = json.loads(line)
+            # await self.log(f"Req received: {line}")
             return Request(req["src"], req["dest"], req["body"])
 
     async def _handle_request(self, req: Request):
@@ -138,7 +139,7 @@ class Node:
         self,
         on_init: Optional[Callable[["Node", Request], Awaitable]] = None,
         *args,
-        **kwargs
+        **kwargs,
     ):
         asyncio.run(self._run(on_init, *args, **kwargs))
 

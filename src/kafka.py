@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from collections import defaultdict
+from copy import deepcopy
 from typing import Dict, List, Tuple
 from node import Node, Request, Body
 
@@ -10,13 +11,22 @@ kcommits: Dict[str, int] = dict()
 
 
 async def send(node: Node, req: Request) -> Body:
-    global offset
-    offset += 1
-    key_offset = offset
     key = req.body["key"]
     msg = req.body["msg"]
-    klog[key].append(tuple([key_offset, msg]))
-    return {"type": "send_ok", "offset": key_offset}
+    route_idx = int(key) % len(node.node_ids)
+    node_id = node.node_ids[route_idx]
+    if node_id == node.node_id:
+        global offset
+        offset += 1
+        key_offset = offset
+        klog[key].append(tuple([key_offset, msg]))
+        return {"type": "send_ok", "offset": key_offset}
+    else:
+        body = deepcopy(req.body)
+        body["type"] = "forward"
+        new_req = Request(node.node_id, node_id, body)
+        resp = await node.send_request_and_wait_for_response(new_req)
+        return {"type": "send_ok", "offset": resp["offset"]}
 
 
 async def poll(node: Node, req: Request) -> Body:
@@ -51,6 +61,7 @@ async def list_committed_offsets(node: Node, req: Request) -> Body:
 if __name__ == "__main__":
     n = Node()
     n.on("send", send)
+    n.on("forward", send)
     n.on("poll", poll)
     n.on("commit_offsets", commit_offsets)
     n.on("list_committed_offsets", list_committed_offsets)
